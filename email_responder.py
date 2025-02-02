@@ -22,12 +22,14 @@ def extract_rate_location(email_subject, email_body, sender):
     cleaned_body = clean_html(email_body)
 
     prompt = f"""
-    Analyze the following email content and subject. 
-    
-    1. Determine if this is a job opportunity email from a **tech recruiter** (Software, DevOps, AI, Data, etc.). 
+    Analyze the following email content and subject.
+
+    1. Determine if this is a job opportunity email from a **tech recruiter** (Software, DevOps, AI, Data, etc.), even if it is informal or conversational.
        If it is **NOT a tech recruiter email**, return `"not_related": true`.
-    
+
     2. If it **IS** a tech recruiter email, extract the **pay rate** (in USD) and **job location**.
+
+    3. If the email is from a recruiter and they are asking for a resume, **always classify as job-related**.
 
     Subject: {email_subject}
 
@@ -38,7 +40,9 @@ def extract_rate_location(email_subject, email_body, sender):
     {{
         "rate": "XX/hr" (or "Unknown" if missing),
         "location": "Remote" or "City, State" or "On-Site" (or "Unknown" if missing),
-        "not_related": true (if this is NOT a tech recruiter email, otherwise false)
+        "not_related": true (if this is NOT a tech recruiter email, otherwise false),
+        "requires_resume": true (if the email asks for a resume, otherwise false),
+        "classification_reason": "Brief explanation of why this email was classified this way"
     }}
     """
 
@@ -49,17 +53,24 @@ def extract_rate_location(email_subject, email_body, sender):
         )
 
         result = response.choices[0].message.content.strip()
+        print(f"📝 Raw API Response: {result}")  # Log full response
 
         # Clean JSON response and parse it correctly
         extracted_data = json.loads(re.sub(r"```json|```", "", result).strip())
 
         # **If it's not a tech recruiter email, mark it as permanently skipped**
         if extracted_data.get("not_related", False):
-            print("🚫 Email is **not tech-related**. Marking as permanently skipped.")
+            reason = extracted_data.get("classification_reason", "No reason provided.")
+            print(f"🚫 Email is **not tech-related** (Reason: {reason}). Marking as permanently skipped.")
             skipped_emails = load_json_file(SKIPPED_EMAILS)
             skipped_emails[f"{email_subject} - {sender}"] = True  # Mark as skipped
             save_json_file(SKIPPED_EMAILS, skipped_emails)
             return "Not Related", "Not Related"
+
+        # **If the email explicitly asks for a resume, always process it**
+        if extracted_data.get("requires_resume", False):
+            print(f"📌 Recruiter explicitly requested a resume. Ensuring response.")
+            return "Resume Requested", "Unknown"
 
         rate = extracted_data.get("rate", "Unknown")
         location = extracted_data.get("location", "Unknown")
@@ -77,11 +88,19 @@ def generate_response(subject, body, sender):
     if rate == "Not Related" and location == "Not Related":
         return None  # Skip non-tech recruiter emails
 
-    if location and "on-site" in location.lower():
+    if rate == "Resume Requested":
+        response = (
+            f"Hello,\n\n"
+            "Thank you for reaching out! Please find my resume attached.\n\n"
+            "Warm Regards,\n"
+            "Steven McConnon\n"
+            "407-733-0570"
+        )
+    elif location and "on-site" in location.lower():
         response = (
             f"Hello,\n\n"
             "I noticed this position is listed as on-site. Would remote work be an option for this role?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -89,7 +108,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this position is in {location}. Would remote work be an option?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -97,7 +116,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this position is in {location}. Can you confirm the pay rate?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -105,7 +124,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"The listed pay rate is {rate}. Can you confirm if remote work is an option?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -113,7 +132,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this opportunity is in {location} with a pay rate of {rate}. Can we discuss further?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -123,12 +142,14 @@ def generate_response(subject, body, sender):
             "Please tell me two things:\n"
             "1. Is the position fully remote?\n"
             "2. How much does the position pay?\n\n"
-            "Warm Regards,\n\n"
+            "Warm Regards,\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
 
     return response
+
+
 
 
 
