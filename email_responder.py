@@ -114,6 +114,7 @@ def generate_response(subject, body, sender):
 
     if rate == "Not Related" and location == "Not Related":
         print(f"🚫 Permanently skipping non-tech email: {subject} (From: {sender})")
+        skipped_emails = load_json_file(SKIPPED_EMAILS)
         skipped_emails[f"{subject} - {sender}"] = True  # Mark as permanently skipped
         save_json_file(SKIPPED_EMAILS, skipped_emails)
         return None  # Skip non-tech recruiter emails
