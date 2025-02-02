@@ -10,6 +10,10 @@ from utils import save_json_file, load_json_file
 
 SKIPPED_EMAILS = "skipped_emails.json"  # Store permanently skipped emails
 
+NEGOTIATE_THRESHOLD = 85
+MIN_ACCEPTABLE_RATE = 75
+HOURS_PER_YEAR = 2080  # 40 hours per week * 52 weeks
+
 def clean_html(raw_html):
     """Remove HTML tags and extract plain text from an email body."""
     clean_text = re.sub(r'<.*?>', '', raw_html)  # Remove HTML tags
@@ -81,9 +85,32 @@ def extract_rate_location(email_subject, email_body, sender):
         print(f"❌ Failed to extract rate/location: {e}")
         return "Unknown", "Unknown"
 
+
+
+def convert_salary_to_hourly(salary_str):
+    """Convert yearly salary to hourly rate assuming 40 hours per week."""
+    try:
+        salary = int(re.search(r'\d+', salary_str).group())
+        hourly_rate = round(salary / HOURS_PER_YEAR, 2)
+        return hourly_rate
+    except (AttributeError, ValueError):
+        return None  # If parsing fails, return None
+
+
+
+
 def generate_response(subject, body, sender):
-    """Generate a response based on extracted job details."""
-    rate, location = extract_rate_location(subject, body, sender)
+    """Generate a response based on extracted job details, including rate negotiation."""
+    rate, location = extract_rate_location(subject, body, sender)  # Ensure sender is passed
+
+    # Convert salary to hourly rate if needed
+    if "/year" in rate.lower():
+        rate_value = convert_salary_to_hourly(rate)
+    else:
+        try:
+            rate_value = int(re.search(r'\d+', rate).group()) if rate != "Unknown" else None
+        except AttributeError:
+            rate_value = None
 
     if rate == "Not Related" and location == "Not Related":
         return None  # Skip non-tech recruiter emails
@@ -92,7 +119,34 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             "Thank you for reaching out! Please find my resume attached.\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
+            "Steven McConnon\n"
+            "407-733-0570"
+        )
+    elif rate_value is not None and rate_value < MIN_ACCEPTABLE_RATE:
+        response = (
+            f"Hello,\n\n"
+            f"Thank you for reaching out. I'm interested in this opportunity, but my minimum rate is ${MIN_ACCEPTABLE_RATE}/hr.\n\n"
+            "Would there be flexibility to adjust the compensation to align with this?\n\n"
+            "Warm Regards,\n\n"
+            "Steven McConnon\n"
+            "407-733-0570"
+        )
+    elif rate_value is not None and MIN_ACCEPTABLE_RATE <= rate_value < NEGOTIATE_THRESHOLD:
+        response = (
+            f"Hello,\n\n"
+            f"I appreciate the offer. I'm interested, but I typically work at a rate of ${NEGOTIATE_THRESHOLD}/hr.\n\n"
+            "Would it be possible to adjust the compensation accordingly?\n\n"
+            "Warm Regards,\n\n"
+            "Steven McConnon\n"
+            "407-733-0570"
+        )
+    elif rate_value is not None and rate_value >= NEGOTIATE_THRESHOLD:
+        response = (
+            f"Hello,\n\n"
+            "The rate meets my expectations, and I would be happy to proceed.\n\n"
+            "Please let me know the next steps.\n\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -100,7 +154,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             "I noticed this position is listed as on-site. Would remote work be an option for this role?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -108,7 +162,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this position is in {location}. Would remote work be an option?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -116,7 +170,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this position is in {location}. Can you confirm the pay rate?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -124,7 +178,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"The listed pay rate is {rate}. Can you confirm if remote work is an option?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -132,7 +186,7 @@ def generate_response(subject, body, sender):
         response = (
             f"Hello,\n\n"
             f"I see this opportunity is in {location} with a pay rate of {rate}. Can we discuss further?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
@@ -142,13 +196,12 @@ def generate_response(subject, body, sender):
             "Please tell me two things:\n"
             "1. Is the position fully remote?\n"
             "2. How much does the position pay?\n\n"
-            "Warm Regards,\n"
+            "Warm Regards,\n\n"
             "Steven McConnon\n"
             "407-733-0570"
         )
 
     return response
-
 
 
 
