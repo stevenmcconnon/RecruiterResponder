@@ -1,6 +1,7 @@
 from email_processor import fetch_recent_recruiter_emails
 from email_responder import generate_response, send_email
 from utils import load_json_file, save_json_file
+import datetime
 
 SKIPPED_EMAILS = "skipped_emails.json"
 SENT_EMAILS = "sent_emails.json"  # Track sent emails to prevent duplicates
@@ -27,8 +28,13 @@ def process_recruiter_emails():
 
         print(f"\n📩 Processing Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
 
-        # Ensure subject and body are passed correctly
-        response = generate_response(subject, body)
+        # Ensure subject, body, and sender are passed correctly
+        response = generate_response(subject, body, sender)
+
+        # Skip non-tech recruiter emails
+        if response is None:
+            print(f"🚫 Skipping non-tech recruiter email: {subject} (From: {sender}).")
+            continue
 
         print("\n=========================")
         print(f"📨 New recruiter email from: {sender}")
@@ -42,12 +48,12 @@ def process_recruiter_emails():
         user_input = input("✅ Send this response? (Y/N/S/M): ").strip().lower()
         if user_input == "y":
             send_email(sender, "Re: " + subject, response, attach_resume=True)
-            sent_emails[sender] = email_date  # Track last interaction
+            sent_emails[sender] = email_date.strftime('%Y-%m-%d %H:%M:%S')  # Convert datetime to string
             save_json_file(SENT_EMAILS, sent_emails)
         elif user_input == "m":
             manual_response = input("✍️ Enter your custom response: ")
             send_email(sender, "Re: " + subject, manual_response, attach_resume=True)
-            sent_emails[sender] = email_date  # Track last interaction
+            sent_emails[sender] = email_date.strftime('%Y-%m-%d %H:%M:%S')  # Convert datetime to string
             save_json_file(SENT_EMAILS, sent_emails)
         elif user_input == "n":
             print("🚫 Email permanently skipped.")
@@ -61,11 +67,14 @@ def process_recruiter_emails():
 def recruiter_has_replied(sender, current_email_date):
     """Checks if a recruiter has replied since the last response."""
     sent_emails = load_json_file(SENT_EMAILS)
-    last_sent_date = sent_emails.get(sender)
+    last_sent_date_str = sent_emails.get(sender)
 
     # If there's no prior sent email, assume first interaction
-    if not last_sent_date:
+    if not last_sent_date_str:
         return True
+
+    # Convert stored date string back to datetime for comparison
+    last_sent_date = datetime.datetime.strptime(last_sent_date_str, '%Y-%m-%d %H:%M:%S')
 
     # If the current email is newer than the last sent email, recruiter has replied
     return current_email_date > last_sent_date
