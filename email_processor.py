@@ -8,6 +8,8 @@ from email.utils import parsedate_to_datetime
 from config import EMAIL_ADDRESS, EMAIL_PASSWORD, IMAP_SERVER
 from utils import load_json_file, save_json_file
 
+SKIPPED_EMAILS = "skipped_emails.json"  # Store permanently skipped emails
+
 def clean_html(raw_html):
     """Remove HTML tags and extract plain text from an email body."""
     clean_text = re.sub(r'<.*?>', '', raw_html)  # Remove HTML tags
@@ -58,6 +60,8 @@ def fetch_recent_recruiter_emails():
     today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     cutoff_date = today - datetime.timedelta(days=4)
 
+    skipped_emails = load_json_file(SKIPPED_EMAILS)  # Load skipped emails list
+
     print("📡 Fetching email headers (real-time processing, batching newest first)...")
 
     batch_size = 20  
@@ -91,6 +95,13 @@ def fetch_recent_recruiter_emails():
 
                     if email_date > today or email_date < cutoff_date:
                         continue  
+
+                    # **Automatically skip "noreply" emails and mark them as permanently skipped**
+                    if "noreply" in sender.lower():
+                        print(f"🚫 Skipping permanently: 'noreply' email from {sender}.")
+                        skipped_emails[f"{subject} - {sender}"] = True  # Mark as skipped
+                        save_json_file(SKIPPED_EMAILS, skipped_emails)
+                        continue
 
                     print(f"\n📖 Processing Job Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
                     yield email_date, sender, subject, body  # Process job email immediately
