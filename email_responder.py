@@ -19,9 +19,49 @@ def clean_html(raw_html):
     clean_text = re.sub(r'<.*?>', '', raw_html)  # Remove HTML tags
     return clean_text.strip()
 
+def check_subject_first(email_subject):
+    """First send only the subject to ChatGPT to determine if the email is job-related."""
+    prompt = f"""
+    Determine if the following email **subject line** is likely to be from a recruiter about a job opportunity.
+
+    Subject: {email_subject}
+
+    Respond with JSON:
+    {{
+        "job_related": true or false
+    }}
+    """
+
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        result = response.choices[0].message.content.strip()
+        extracted_data = json.loads(re.sub(r"```json|```", "", result).strip())
+
+        return extracted_data.get("job_related", False)  # Returns True if job-related, False otherwise
+    except Exception as e:
+        print(f"⚠️ Failed to analyze subject with ChatGPT: {e}")
+        return None  # If ChatGPT fails, continue processing
+    
+    
+
 def extract_rate_location(email_subject, email_body, sender):
     """Extract pay rate, job location, and determine if email is tech-related using OpenAI."""
 
+    # First, try to determine job relevance from subject only
+    job_related = check_subject_first(email_subject)
+
+    if job_related is False:
+        print(f"🚫 Skipping based on subject: {email_subject}")
+        skipped_emails = load_json_file(SKIPPED_EMAILS)
+        skipped_emails[f"{email_subject} - {sender}"] = True  # Mark as skipped
+        save_json_file(SKIPPED_EMAILS, skipped_emails)
+        return "Not Related", "Not Related"
+
+    
     # Clean HTML if present
     cleaned_body = clean_html(email_body)
 
