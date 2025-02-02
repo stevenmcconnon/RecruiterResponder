@@ -71,7 +71,7 @@ def extract_rate_location(email_subject, email_body, sender):
     1. Determine if this is a job opportunity email from a **tech recruiter** (Software, DevOps, AI, Data, etc.), even if it is informal or conversational.
        If it is **NOT a tech recruiter email**, return `"not_related": true`.
 
-    2. If it **IS** a tech recruiter email, extract the **pay rate** (in USD) and **job location**.
+    2. If it **IS** a tech recruiter email, extract the **pay rate** (in USD) per hour and **job location**.
 
     3. If the email is from a recruiter and they are asking for a resume, **always classify as job-related**.
 
@@ -82,7 +82,7 @@ def extract_rate_location(email_subject, email_body, sender):
 
     Ensure the response is a **JSON object** formatted like this:
     {{
-        "rate": "XX/hr" (or "Unknown" if missing),
+        "rate": "XX" (or "Unknown" if missing) (just the integer only please, if yearly convert it based on 40hr week),
         "location": "Remote" or "City, State" or "On-Site" (or "Unknown" if missing),
         "not_related": true (if this is NOT a tech recruiter email, otherwise false),
         "requires_resume": true (if the email asks for a resume, otherwise false),
@@ -111,11 +111,6 @@ def extract_rate_location(email_subject, email_body, sender):
             save_json_file(SKIPPED_EMAILS, skipped_emails)
             return "Not Related", "Not Related"
 
-        # **If the email explicitly asks for a resume, always process it**
-        if extracted_data.get("requires_resume", False):
-            print(f"📌 Recruiter explicitly requested a resume. Ensuring response.")
-            return "Resume Requested", "Unknown"
-
         rate = extracted_data.get("rate", "Unknown")
         location = extracted_data.get("location", "Unknown")
         
@@ -142,7 +137,7 @@ def convert_salary_to_hourly(salary_str):
 def generate_response(subject, body, sender):
     """Generate a response based on extracted job details, including rate negotiation."""
     rate, location = extract_rate_location(subject, body, sender)  # Ensure sender is passed
-
+    
     # Convert salary to hourly rate if needed
     if "/year" in rate.lower():
         rate_value = convert_salary_to_hourly(rate)
@@ -153,7 +148,6 @@ def generate_response(subject, body, sender):
             rate_value = None
 
     if rate == "Not Related" and location == "Not Related":
-        print(f"🚫 Permanently skipping non-tech email: {subject} (From: {sender})")
         skipped_emails = load_json_file(SKIPPED_EMAILS)
         skipped_emails[f"{subject} - {sender}"] = True  # Mark as permanently skipped
         save_json_file(SKIPPED_EMAILS, skipped_emails)
@@ -167,7 +161,7 @@ def generate_response(subject, body, sender):
             "Steven McConnon\n"
             "407-733-0570"
         )
-    elif rate_value is not None and rate_value < MIN_ACCEPTABLE_RATE:
+    elif rate_value < MIN_ACCEPTABLE_RATE:
         response = (
             f"Hello,\n\n"
             f"Thank you for reaching out. I'm interested in this opportunity, but my minimum rate is ${MIN_ACCEPTABLE_RATE}/hr.\n\n"

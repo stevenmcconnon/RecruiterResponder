@@ -33,7 +33,6 @@ def process_recruiter_emails():
 
         # Skip non-tech recruiter emails
         if response is None:
-            print(f"🚫 Skipping non-tech recruiter email: {subject} (From: {sender}).")
             continue
 
         print("\n=========================")
