@@ -40,6 +40,8 @@ def process_recruiter_emails():
         print(f"📨 New recruiter email from: {sender}")
         print(f"📌 Subject: {subject}")
         print(f"🕒 Received at: {email_date.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"📌 Body: {body}")
+
         print("\n💬 Generated Response:\n")
         print(response)
         print("\n=========================")

@@ -49,7 +49,6 @@ def extract_rate_location(email_subject, email_body, sender):
         )
 
         result = response.choices[0].message.content.strip()
-        print(f"📝 Raw API Response: {result}")  # Log full response
 
         # Clean JSON response and parse it correctly
         extracted_data = json.loads(re.sub(r"```json|```", "", result).strip())

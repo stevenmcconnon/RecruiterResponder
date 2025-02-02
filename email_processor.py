@@ -3,30 +3,36 @@ import email
 import datetime
 import time
 import sys
+import re
 from email.utils import parsedate_to_datetime
 from config import EMAIL_ADDRESS, EMAIL_PASSWORD, IMAP_SERVER
 from utils import load_json_file, save_json_file
 
+def clean_html(raw_html):
+    """Remove HTML tags and extract plain text from an email body."""
+    clean_text = re.sub(r'<.*?>', '', raw_html)  # Remove HTML tags
+    return clean_text.strip()
+
 def extract_email_body(msg):
-    """Extract plain text body from an email message, handling encoding errors."""
+    """Extract plain text body from an email message, handling encoding errors and stripping HTML."""
+    body_text = ""
+    
     if msg.is_multipart():
         for part in msg.walk():
-            if part.get_content_type() == "text/plain":
+            if part.get_content_type() == "text/plain" or part.get_content_type() == "text/html":
                 try:
-                    return part.get_payload(decode=True).decode("utf-8", errors="replace")
+                    body_text = part.get_payload(decode=True).decode("utf-8", errors="replace")
                 except UnicodeDecodeError:
-                    return part.get_payload(decode=True).decode("latin-1", errors="replace")
+                    body_text = part.get_payload(decode=True).decode("latin-1", errors="replace")
+                break  # Use first available text content
+    
     else:
         try:
-            return msg.get_payload(decode=True).decode("utf-8", errors="replace")
+            body_text = msg.get_payload(decode=True).decode("utf-8", errors="replace")
         except UnicodeDecodeError:
-            return msg.get_payload(decode=True).decode("latin-1", errors="replace")
-    return ""
+            body_text = msg.get_payload(decode=True).decode("latin-1", errors="replace")
 
-def contains_job_keyword(subject, body):
-    """Check if job-related terms are in the subject or body."""
-    job_keywords = ["job", "hiring", "opportunity", "position", "role", "opening", "career", "developer", "engineer", "recruiter"]
-    return any(keyword in subject.lower() or keyword in body.lower() for keyword in job_keywords)
+    return clean_html(body_text)  # Always return cleaned text
 
 def fetch_recent_recruiter_emails():
     """Fetch all emails from the last 4 days, ensuring job-related emails are processed immediately."""
@@ -65,7 +71,7 @@ def fetch_recent_recruiter_emails():
         try:
             _, msg_data = mail.fetch(",".join(e_id.decode() for e_id in batch), "(RFC822)")  
         except imaplib.IMAP4.error:
-            print("⚠️ IMAP error while fetching emails. Retrying after 10 seconds...")
+            print("\n⚠️ IMAP error while fetching emails. Retrying after 10 seconds...")
             time.sleep(10)
             continue  
 
@@ -74,25 +80,20 @@ def fetch_recent_recruiter_emails():
                 msg = email.message_from_bytes(response_part[1])
                 sender = msg["From"]
                 subject = msg["Subject"]
-                body = extract_email_body(msg)
+                body = extract_email_body(msg)  # Now always returning clean text
 
                 if "Date" in msg:
                     try:
                         email_date = parsedate_to_datetime(msg["Date"]).replace(tzinfo=None)
                     except Exception:
-                        print(f"⚠️ Could not parse date for email from {sender}. Skipping.")
+                        print(f"\n⚠️ Could not parse date for email from {sender}. Skipping.")
                         continue
 
                     if email_date > today or email_date < cutoff_date:
                         continue  
 
-                    # Ensure email visibility logic
-                    if contains_job_keyword(subject, body) or "remote" in body.lower():
-                        print(f"📖 Processing Job Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
-                        print(f"📜 Full Email Body: {body[:500]}...")  # Preview first 500 chars of body
-                        yield email_date, sender, subject, body  # Process job email immediately
-                    else:
-                        print(f"📖 Skipping Non-Job Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
+                    print(f"\n📖 Processing Job Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
+                    yield email_date, sender, subject, body  # Process job email immediately
 
         for _ in range(3):
             print(".", end="", flush=True)
