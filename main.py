@@ -1,10 +1,26 @@
-from email_processor import fetch_recent_recruiter_emails
-from email_responder import generate_response, send_email
+from email_processor import *
+from email_responder import *
 from utils import load_json_file, save_json_file
 import datetime
+from email.header import decode_header
 
 SKIPPED_EMAILS = "skipped_emails.json"
 SENT_EMAILS = "sent_emails.json"  # Track sent emails to prevent duplicates
+
+
+
+def decode_subject(subject):
+    """Decodes a MIME/Base64 encoded subject into plain text."""
+    decoded_parts = decode_header(subject)
+    decoded_subject = ""
+
+    for part, encoding in decoded_parts:
+        if isinstance(part, bytes):
+            decoded_subject += part.decode(encoding or "utf-8", errors="ignore")
+        else:
+            decoded_subject += part  # Already a string
+
+    return decoded_subject.strip()
 
 def process_recruiter_emails():
     """Fetch and process recruiter emails immediately instead of storing them for later."""
@@ -16,6 +32,7 @@ def process_recruiter_emails():
     # Fetch emails and process them one at a time
     for email_date, sender, subject, body in fetch_recent_recruiter_emails():
         email_id = f"{email_date} - {sender}"
+        subject = decode_subject(subject)
 
         # **Stop displaying permanently skipped emails**
         if email_id in skipped_emails:
@@ -28,7 +45,14 @@ def process_recruiter_emails():
 
         print(f"\n📩 Processing Email: {email_date.strftime('%Y-%m-%d %H:%M:%S')} - {subject} (From: {sender})")
 
-        # Ensure subject, body, and sender are passed correctly
+        if not check_subject_first(subject):
+            print(f"🚫 Ignoring non-job-related email: {subject}")
+            continue
+
+        # Step 2: Extract rate and location before generating response
+        rate, location = extract_rate_location(subject, body)
+
+        # Step 3: Generate response only if it’s a valid job email
         response = generate_response(subject, body, sender)
 
         # Skip non-tech recruiter emails

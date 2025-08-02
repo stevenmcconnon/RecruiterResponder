@@ -1,0 +1,3 @@
+myenv/*
+/skipped_emails.json
+sent_emails.json
